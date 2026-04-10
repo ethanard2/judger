@@ -42,20 +42,34 @@ export const create = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
+    const normalizedCaseNumber = args.caseNumber.trim();
+
     const existing = await ctx.db
       .query("cases")
-      .withIndex("by_case_number", (q) =>
-        q.eq("caseNumber", args.caseNumber).eq("courtId", args.courtId),
+      .withIndex("by_user_case", (q) =>
+        q
+          .eq("userId", identity.subject)
+          .eq("caseNumber", normalizedCaseNumber)
+          .eq("courtId", args.courtId),
       )
       .first();
 
-    if (existing && existing.userId === identity.subject) {
+    if (existing) {
+      if (existing.status === "error") {
+        await ctx.db.patch(existing._id, {
+          status: "pending",
+          statusMessage: "Retrying analysis...",
+        });
+        await ctx.scheduler.runAfter(0, internal.ingest.ingestCase, {
+          caseId: existing._id,
+        });
+      }
       return existing._id;
     }
 
     const caseId = await ctx.db.insert("cases", {
       userId: identity.subject,
-      caseNumber: args.caseNumber,
+      caseNumber: normalizedCaseNumber,
       courtId: args.courtId,
       courtName: args.courtName,
       status: "pending",
@@ -115,6 +129,44 @@ export const updateDocketData = internalMutation({
   },
   handler: async (ctx, { id, ...data }) => {
     await ctx.db.patch(id, data);
+  },
+});
+
+export const getAnalysisContext = internalQuery({
+  args: { id: v.id("cases") },
+  handler: async (ctx, { id }) => {
+    const caseRecord = await ctx.db.get(id);
+    if (!caseRecord) return null;
+    const judge = caseRecord.judgeId
+      ? await ctx.db.get(caseRecord.judgeId)
+      : null;
+    const docketEntries = await ctx.db
+      .query("docketEntries")
+      .withIndex("by_case", (q) => q.eq("caseId", id))
+      .collect();
+    return { case: caseRecord, judge, docketEntries };
+  },
+});
+
+export const getDetail = query({
+  args: { id: v.id("cases") },
+  handler: async (ctx, { id }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const caseRecord = await ctx.db.get(id);
+    if (!caseRecord || caseRecord.userId !== identity.subject) return null;
+    const judge = caseRecord.judgeId
+      ? await ctx.db.get(caseRecord.judgeId)
+      : null;
+    const docketEntries = await ctx.db
+      .query("docketEntries")
+      .withIndex("by_case", (q) => q.eq("caseId", id))
+      .collect();
+    const conversation = await ctx.db
+      .query("conversations")
+      .withIndex("by_case", (q) => q.eq("caseId", id))
+      .first();
+    return { case: caseRecord, judge, docketEntries, conversation };
   },
 });
 

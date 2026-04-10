@@ -3,8 +3,9 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { callClaude } from "./lib/claude";
+import { callClaude, canUseClaude } from "./lib/claude";
 import { CHAT_SYSTEM_PROMPT } from "./lib/prompts";
+import { buildFallbackChatResponse } from "./lib/mock";
 
 export const sendMessage = action({
   args: {
@@ -60,11 +61,27 @@ export const sendMessage = action({
       { role: "user", content: message },
     ];
 
-    const response = await callClaude({
-      system: systemPrompt,
-      messages,
-      maxTokens: 4096,
-    });
+    let response = "";
+
+    if (canUseClaude()) {
+      try {
+        response = await callClaude({
+          system: systemPrompt,
+          messages,
+          maxTokens: 4096,
+        });
+      } catch (err) {
+        console.warn("Claude chat failed, using fallback:", err);
+      }
+    }
+
+    if (!response) {
+      response = buildFallbackChatResponse({
+        question: message,
+        caseName: caseRecord.caseName,
+        judgeProfileJson: judgeProfile,
+      });
+    }
 
     await ctx.runMutation(internal.conversations.appendMessages, {
       caseId,

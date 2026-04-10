@@ -15,6 +15,10 @@ function getClient(): Anthropic {
   return client;
 }
 
+export function canUseClaude(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
+}
+
 export async function callClaude({
   model = "claude-sonnet-4-20250514",
   system,

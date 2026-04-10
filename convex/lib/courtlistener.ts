@@ -1,5 +1,9 @@
 const BASE_URL = "https://www.courtlistener.com";
 
+export function canUseCourtListener(): boolean {
+  return Boolean(process.env.COURTLISTENER_API_TOKEN);
+}
+
 export async function courtListenerFetch<T = any>(
   path: string,
 ): Promise<T> {

@@ -11,6 +11,33 @@ export const byJudge = internalQuery({
   },
 });
 
+export const replaceForJudge = internalMutation({
+  args: {
+    judgeId: v.id("judges"),
+    opinions: v.array(
+      v.object({
+        courtListenerClusterId: v.number(),
+        caseName: v.optional(v.string()),
+        dateFiled: v.optional(v.string()),
+        caseType: v.optional(v.string()),
+        opinionText: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx, { judgeId, opinions }) => {
+    const existing = await ctx.db
+      .query("judgeOpinions")
+      .withIndex("by_judge", (q) => q.eq("judgeId", judgeId))
+      .collect();
+    for (const op of existing) {
+      await ctx.db.delete(op._id);
+    }
+    for (const op of opinions) {
+      await ctx.db.insert("judgeOpinions", { judgeId, ...op });
+    }
+  },
+});
+
 export const create = internalMutation({
   args: {
     judgeId: v.id("judges"),

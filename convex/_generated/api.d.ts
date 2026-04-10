@@ -20,7 +20,9 @@ import type * as judgeOpinions from "../judgeOpinions.js";
 import type * as judges from "../judges.js";
 import type * as lib_claude from "../lib/claude.js";
 import type * as lib_courtlistener from "../lib/courtlistener.js";
+import type * as lib_mock from "../lib/mock.js";
 import type * as lib_prompts from "../lib/prompts.js";
+import type * as lib_utils from "../lib/utils.js";
 
 import type {
   ApiFromModules,
@@ -41,7 +43,9 @@ declare const fullApi: ApiFromModules<{
   judges: typeof judges;
   "lib/claude": typeof lib_claude;
   "lib/courtlistener": typeof lib_courtlistener;
+  "lib/mock": typeof lib_mock;
   "lib/prompts": typeof lib_prompts;
+  "lib/utils": typeof lib_utils;
 }>;
 
 /**

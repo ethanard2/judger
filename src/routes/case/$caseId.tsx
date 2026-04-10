@@ -3,6 +3,7 @@ import { useConvexQuery, useConvexAction } from "@convex-dev/react-query";
 import { api } from "../../../convex/_generated/api";
 import { useState, useRef, useEffect } from "react";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { parseJudgeProfile, type JudgeProfile } from "~/lib/judge-profile";
 
 export const Route = createFileRoute("/case/$caseId")({
   component: CasePage,
@@ -15,21 +16,11 @@ function CasePage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("analysis");
 
-  const caseRecord = useConvexQuery(api.cases.get, {
+  const detail = useConvexQuery(api.cases.getDetail, {
     id: caseId as Id<"cases">,
   });
-  const entries = useConvexQuery(api.docketEntries.byCase, {
-    caseId: caseId as Id<"cases">,
-  });
-  const judge = useConvexQuery(
-    api.judges.get,
-    caseRecord?.judgeId ? { id: caseRecord.judgeId } : "skip",
-  );
-  const conversation = useConvexQuery(api.conversations.byCase, {
-    caseId: caseId as Id<"cases">,
-  });
 
-  if (caseRecord === undefined) {
+  if (detail === undefined) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
         <p className="text-gray-400">Loading case...</p>
@@ -37,7 +28,7 @@ function CasePage() {
     );
   }
 
-  if (caseRecord === null) {
+  if (detail === null) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
         <p className="text-gray-500">Case not found</p>
@@ -45,6 +36,7 @@ function CasePage() {
     );
   }
 
+  const { case: caseRecord, judge, docketEntries, conversation } = detail;
   const isProcessing =
     caseRecord.status !== "ready" && caseRecord.status !== "error";
 
@@ -128,8 +120,12 @@ function CasePage() {
         {activeTab === "analysis" && (
           <AnalysisTab analysis={caseRecord.caseAnalysis} />
         )}
-        {activeTab === "judge" && <JudgeTab judge={judge} />}
-        {activeTab === "docket" && <DocketTab entries={entries ?? []} />}
+        {activeTab === "judge" && (
+          <JudgeTab judge={judge} />
+        )}
+        {activeTab === "docket" && (
+          <DocketTab entries={docketEntries ?? []} />
+        )}
         {activeTab === "chat" && (
           <ChatTab
             caseId={caseId as Id<"cases">}
@@ -146,11 +142,10 @@ function AnalysisTab({ analysis }: { analysis?: string }) {
   if (!analysis) {
     return (
       <div className="text-center py-12 text-gray-400">
-        Analysis not yet available. Check back once processing completes.
+        Analysis not yet available.
       </div>
     );
   }
-
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-8">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -172,31 +167,151 @@ function JudgeTab({ judge }: { judge: any }) {
     );
   }
 
-  let profileData: any = null;
-  try {
-    profileData = JSON.parse(judge.profile);
-  } catch {
-    // plain text
+  const profile = parseJudgeProfile(judge.profile);
+
+  if (!profile) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <div className="text-gray-700 whitespace-pre-wrap">{judge.profile}</div>
+      </div>
+    );
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-8">
-      <h2 className="text-lg font-semibold text-gray-900 mb-2">
-        Judge {judge.name}
-      </h2>
-      <div className="flex gap-4 text-sm text-gray-500 mb-6">
-        {judge.appointedBy && <span>Appointed by {judge.appointedBy}</span>}
-        {judge.opinionCount && (
-          <span>{judge.opinionCount} opinions analyzed</span>
+    <div className="space-y-6">
+      {/* Overview */}
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">
+          Judge {profile.judgeName ?? judge.name}
+        </h2>
+        <div className="flex gap-4 text-sm text-gray-500 mb-4">
+          {profile.bio?.appointedBy && (
+            <span>Appointed by {profile.bio.appointedBy}</span>
+          )}
+          {judge.opinionCount != null && (
+            <span>{judge.opinionCount} opinions analyzed</span>
+          )}
+        </div>
+        {profile.overview && (
+          <p className="text-sm text-gray-700">{profile.overview}</p>
         )}
       </div>
-      {profileData ? (
-        <pre className="bg-gray-50 p-4 rounded-lg overflow-auto text-xs whitespace-pre-wrap">
-          {JSON.stringify(profileData, null, 2)}
-        </pre>
-      ) : (
-        <div className="text-gray-700 whitespace-pre-wrap">{judge.profile}</div>
+
+      {/* Grant/Deny Rates */}
+      {profile.grantRates && profile.grantRates.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-8">
+          <h3 className="text-md font-semibold text-gray-900 mb-4">
+            Grant/Deny Rates by Motion Type
+          </h3>
+          <div className="space-y-3">
+            {profile.grantRates.map((rate) => (
+              <div key={rate.motionType}>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="font-medium text-gray-800">
+                    {rate.motionType}
+                  </span>
+                  <span className="text-gray-500 text-xs">
+                    {rate.sampleSize ?? 0} cases &middot;{" "}
+                    {rate.grantRate ?? 0}% grant rate
+                  </span>
+                </div>
+                <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                  {(rate.granted ?? 0) > 0 && (
+                    <div
+                      className="bg-green-500 h-full"
+                      style={{
+                        width: `${((rate.granted ?? 0) / (rate.sampleSize ?? 1)) * 100}%`,
+                      }}
+                    />
+                  )}
+                  {(rate.mixed ?? 0) > 0 && (
+                    <div
+                      className="bg-amber-400 h-full"
+                      style={{
+                        width: `${((rate.mixed ?? 0) / (rate.sampleSize ?? 1)) * 100}%`,
+                      }}
+                    />
+                  )}
+                  {(rate.denied ?? 0) > 0 && (
+                    <div
+                      className="bg-red-400 h-full"
+                      style={{
+                        width: `${((rate.denied ?? 0) / (rate.sampleSize ?? 1)) * 100}%`,
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-4 text-xs text-gray-400 mt-2">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500" /> Granted
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-400" /> Partial
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-400" /> Denied
+              </span>
+            </div>
+          </div>
+        </div>
       )}
+
+      {/* Tendencies + Preferences + Red Flags in grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {profile.keyTendencies && profile.keyTendencies.length > 0 && (
+          <ProfileSection title="Key Tendencies" items={profile.keyTendencies} />
+        )}
+        {profile.proceduralPreferences &&
+          profile.proceduralPreferences.length > 0 && (
+            <ProfileSection
+              title="Procedural Preferences"
+              items={profile.proceduralPreferences}
+            />
+          )}
+        {profile.redFlags && profile.redFlags.length > 0 && (
+          <ProfileSection
+            title="Red Flags"
+            items={profile.redFlags}
+            variant="danger"
+          />
+        )}
+        {profile.citedPrecedents && profile.citedPrecedents.length > 0 && (
+          <ProfileSection
+            title="Most Cited Precedents"
+            items={profile.citedPrecedents}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProfileSection({
+  title,
+  items,
+  variant,
+}: {
+  title: string;
+  items: string[];
+  variant?: "danger";
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <h3 className="text-md font-semibold text-gray-900 mb-3">{title}</h3>
+      <ul className="space-y-2">
+        {items.map((item, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm">
+            <span
+              className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
+                variant === "danger" ? "bg-red-400" : "bg-primary"
+              }`}
+            />
+            <span className="text-gray-700">{item}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -219,7 +334,15 @@ function DocketTab({ entries }: { entries: any[] }) {
               {entry.entryNumber ?? "\u2014"}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-gray-900">{entry.description}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-gray-900">{entry.description}</p>
+                {entry.documentType &&
+                  entry.documentType !== "filing" && (
+                    <span className="text-[10px] font-medium bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded shrink-0">
+                      {entry.documentType.replace(/_/g, " ")}
+                    </span>
+                  )}
+              </div>
               {entry.dateFiled && (
                 <p className="text-xs text-gray-400 mt-1">{entry.dateFiled}</p>
               )}

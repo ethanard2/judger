@@ -46,7 +46,8 @@ export default defineSchema({
     lastSyncedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
-    .index("by_case_number", ["caseNumber", "courtId"]),
+    .index("by_case_number", ["caseNumber", "courtId"])
+    .index("by_user_case", ["userId", "caseNumber", "courtId"]),
 
   judges: defineTable({
     name: v.string(),
