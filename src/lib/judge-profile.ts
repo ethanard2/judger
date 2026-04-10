@@ -1,6 +1,43 @@
+export type MotionStat = {
+  type: string;
+  granted: number;
+  denied: number;
+  partial: number;
+  total: number;
+  rate: string;
+};
+
+export type PrecedentCitation = {
+  case: string;
+  count: number;
+  context: string;
+};
+
 export type JudgeProfile = {
-  judgeName?: string;
   overview?: string;
+  atAGlance?: {
+    avgOpinionLengthPages?: number;
+    msjGrantRate?: string;
+    mtdGrantRate?: string;
+    opinionsAnalyzed?: number;
+    dateRange?: string;
+    suaSponteRate?: string;
+  };
+  motionStats?: MotionStat[];
+  analyticalStyle?: string[];
+  proceduralPreferences?: string[];
+  discoveryApproach?: string[];
+  summaryJudgment?: string[];
+  tonalNotes?: string[];
+  topPrecedents?: PrecedentCitation[];
+  timeline?: {
+    avgMotionToDecision?: string;
+    avgMTDDecision?: string;
+    avgMSJDecision?: string;
+  };
+  // Legacy/heuristic fields
+  judgeName?: string;
+  courtName?: string;
   grantRates?: Array<{
     motionType: string;
     sampleSize?: number;
@@ -10,15 +47,8 @@ export type JudgeProfile = {
     mixed?: number;
   }>;
   keyTendencies?: string[];
-  analyticalFrameworks?: string[];
-  proceduralPreferences?: string[];
   redFlags?: string[];
   citedPrecedents?: string[];
-  focusAreas?: string[];
-  tone?: {
-    style?: string;
-    detailLevel?: string;
-  };
   bio?: {
     appointedBy?: string;
     birthYear?: number;

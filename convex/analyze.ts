@@ -5,7 +5,8 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { callClaude, canUseClaude, chunkArray } from "./lib/claude";
 import {
-  JUDGE_PROFILE_EXTRACTION_PROMPT,
+  JUDGE_OPINION_EXTRACTION_PROMPT,
+  JUDGE_PROFILE_SYNTHESIS_PROMPT,
   CASE_STRATEGIC_ANALYSIS_PROMPT,
 } from "./lib/prompts";
 import {
@@ -38,8 +39,9 @@ export const analyzeJudge = internalAction({
 
       if (canUseClaude() && opinions.length > 0) {
         try {
-          const batches = chunkArray(opinions, 6);
-          const batchResults: unknown[] = [];
+          // Stage 1: Extract structured data from each batch of opinions
+          const batches = chunkArray(opinions, 5);
+          const allExtractions: unknown[] = [];
 
           for (const batch of batches) {
             const opinionTexts = batch
@@ -50,32 +52,31 @@ export const analyzeJudge = internalAction({
               .join("\n\n");
 
             const result = await callClaude({
-              system: JUDGE_PROFILE_EXTRACTION_PROMPT,
+              system: JUDGE_OPINION_EXTRACTION_PROMPT,
               messages: [{ role: "user", content: opinionTexts }],
-              maxTokens: 4096,
-            });
-
-            batchResults.push(
-              safeJsonParse(extractJsonPayload(result), { opinions: [] }),
-            );
-          }
-
-          if (batchResults.length === 1) {
-            profile = batchResults[0];
-          } else {
-            const merged = await callClaude({
-              system:
-                "Merge these partial judge profile extractions into a single comprehensive profile. Combine statistics, deduplicate precedents. Return as JSON.",
-              messages: [
-                {
-                  role: "user",
-                  content: JSON.stringify(batchResults),
-                },
-              ],
               maxTokens: 8192,
             });
-            profile = safeJsonParse(extractJsonPayload(merged), null);
+
+            const parsed = safeJsonParse(extractJsonPayload(result), []);
+            if (Array.isArray(parsed)) {
+              allExtractions.push(...parsed);
+            } else {
+              allExtractions.push(parsed);
+            }
           }
+
+          // Stage 2: Synthesize all extractions into a comprehensive profile
+          const synthesized = await callClaude({
+            system: JUDGE_PROFILE_SYNTHESIS_PROMPT,
+            messages: [
+              {
+                role: "user",
+                content: `Judge: ${judge?.name ?? "Unknown"}\nCourt: ${caseRecord?.courtName ?? "Unknown"}\n\nHere are structured extractions from ${allExtractions.length} opinion analyses:\n\n${JSON.stringify(allExtractions, null, 2)}`,
+              },
+            ],
+            maxTokens: 8192,
+          });
+          profile = safeJsonParse(extractJsonPayload(synthesized), null);
         } catch (err) {
           console.warn("Claude judge analysis failed, using heuristic:", err);
           profile = null;

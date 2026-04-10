@@ -132,9 +132,7 @@ export const ingestCase = internalAction({
         parties: parties.length > 0 ? parties : undefined,
       });
 
-      // Pull docket entries with dedup via replace
-      let entriesUrl: string | null =
-        `/api/rest/v4/docket-entries/?docket=${docket.id}&order_by=entry_number`;
+      // Pull docket entries (requires paid CourtListener tier — gracefully skip if 403)
       const allEntries: Array<{
         entryNumber?: number;
         dateFiled?: string;
@@ -144,29 +142,41 @@ export const ingestCase = internalAction({
         courtListenerEntryId?: number;
       }> = [];
 
-      while (entriesUrl && allEntries.length < 500) {
-        const entriesPage: PaginatedResponse<DocketEntry> =
-          await courtListenerFetch(entriesUrl);
-        for (const entry of entriesPage.results) {
-          allEntries.push({
-            entryNumber: entry.entry_number,
-            dateFiled: entry.date_filed,
-            description: entry.description,
-            rawText: truncate(
-              entry.recap_documents?.[0]?.plain_text || undefined,
-              4000,
-            ),
-            documentType: classifyDocumentType(entry.description),
-            courtListenerEntryId: entry.id,
-          });
+      try {
+        let entriesUrl: string | null =
+          `/api/rest/v4/docket-entries/?docket=${docket.id}&order_by=entry_number`;
+
+        while (entriesUrl && allEntries.length < 500) {
+          const entriesPage: PaginatedResponse<DocketEntry> =
+            await courtListenerFetch(entriesUrl);
+          for (const entry of entriesPage.results) {
+            allEntries.push({
+              entryNumber: entry.entry_number,
+              dateFiled: entry.date_filed,
+              description: entry.description,
+              rawText: truncate(
+                entry.recap_documents?.[0]?.plain_text || undefined,
+                4000,
+              ),
+              documentType: classifyDocumentType(entry.description),
+              courtListenerEntryId: entry.id,
+            });
+          }
+          entriesUrl = entriesPage.next;
         }
-        entriesUrl = entriesPage.next;
+      } catch (err) {
+        console.warn(
+          "Docket entries unavailable (may require paid CourtListener access):",
+          err,
+        );
       }
 
-      await ctx.runMutation(internal.docketEntries.replaceForCase, {
-        caseId,
-        entries: allEntries,
-      });
+      if (allEntries.length > 0) {
+        await ctx.runMutation(internal.docketEntries.replaceForCase, {
+          caseId,
+          entries: allEntries,
+        });
+      }
 
       // Find or create judge
       const judgeName = docket.assigned_to_str;
@@ -250,8 +260,9 @@ export const ingestJudgeOpinions = internalAction({
         profileStatus: "processing",
       });
 
+      // Use q= for full-text search (judge= param unreliable), order_by=score+desc
       let searchUrl: string | null =
-        `/api/rest/v4/search/?type=o&judge=${encodeURIComponent(judgeName)}&court=${courtId}&order_by=-dateFiled`;
+        `/api/rest/v4/search/?type=o&q=${encodeURIComponent(judgeName)}&court=${courtId}&order_by=score+desc`;
 
       const opinions: Array<{
         courtListenerClusterId: number;

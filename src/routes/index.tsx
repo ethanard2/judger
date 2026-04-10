@@ -1,33 +1,26 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { FEDERAL_COURTS } from "~/lib/courts";
-import { useConvexMutation } from "@convex-dev/react-query";
+import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { authClient } from "~/lib/auth-client";
 
 export const Route = createFileRoute("/")({
   component: LandingPage,
 });
 
 function LandingPage() {
-  const session = authClient.useSession();
   const navigate = useNavigate();
   const [caseNumber, setCaseNumber] = useState("");
   const [courtId, setCourtId] = useState("nysd");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
-  const createCaseMutation = useConvexMutation(api.cases.create);
+  const createCase = useMutation(api.cases.create);
 
   const court = FEDERAL_COURTS.find((c) => c.id === courtId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
-    if (!session.data) {
-      navigate({ to: "/sign-in" });
-      return;
-    }
 
     if (!caseNumber.trim()) {
       setError("Please enter a case number");
@@ -36,7 +29,7 @@ function LandingPage() {
 
     setCreating(true);
     try {
-      const caseId = await createCaseMutation({
+      const caseId = await createCase({
         caseNumber: caseNumber.trim(),
         courtId,
         courtName: court?.name ?? courtId,
@@ -51,37 +44,24 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary-dark to-primary">
-      {/* Nav */}
       <nav className="flex items-center justify-between px-8 py-4">
-        <div className="text-white text-xl font-bold">CourtCase Companion</div>
-        <div>
-          {session.data ? (
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate({ to: "/dashboard" })}
-                className="text-white/80 hover:text-white text-sm"
-              >
-                Dashboard
-              </button>
-              <button
-                onClick={() => authClient.signOut()}
-                className="text-white/60 hover:text-white text-sm"
-              >
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => navigate({ to: "/sign-in" })}
-              className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg text-sm transition"
-            >
-              Sign in
-            </button>
-          )}
+        <div className="text-white text-xl font-bold">BenchMemo</div>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate({ to: "/example" })}
+            className="text-white/80 hover:text-white text-sm"
+          >
+            See Example
+          </button>
+          <button
+            onClick={() => navigate({ to: "/dashboard" })}
+            className="text-white/80 hover:text-white text-sm"
+          >
+            Dashboard
+          </button>
         </div>
       </nav>
 
-      {/* Hero */}
       <div className="max-w-3xl mx-auto px-8 pt-24 pb-16 text-center">
         <h1 className="text-5xl font-bold text-white mb-4 leading-tight">
           Know your judge before
@@ -94,7 +74,6 @@ function LandingPage() {
           case.
         </p>
 
-        {/* Case input form */}
         <form
           onSubmit={handleSubmit}
           className="bg-white rounded-2xl p-8 shadow-2xl text-left"
@@ -130,9 +109,7 @@ function LandingPage() {
             </div>
           </div>
 
-          {error && (
-            <p className="text-danger text-sm mb-4">{error}</p>
-          )}
+          {error && <p className="text-danger text-sm mb-4">{error}</p>}
 
           <button
             type="submit"
@@ -144,7 +121,6 @@ function LandingPage() {
         </form>
       </div>
 
-      {/* Features */}
       <div className="max-w-4xl mx-auto px-8 pb-24 grid grid-cols-1 md:grid-cols-3 gap-8">
         {[
           {
@@ -169,11 +145,10 @@ function LandingPage() {
         ))}
       </div>
 
-      {/* Disclaimer */}
       <div className="border-t border-white/10 py-6 text-center">
         <p className="text-white/40 text-xs max-w-2xl mx-auto">
-          CourtCase Companion is an intelligence tool, not a lawyer. It does not
-          provide legal advice. Always verify analysis and consult with qualified
+          BenchMemo is an intelligence tool, not a lawyer. It does not provide
+          legal advice. Always verify analysis and consult with qualified
           counsel.
         </p>
       </div>

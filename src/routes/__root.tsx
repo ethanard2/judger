@@ -1,33 +1,19 @@
 /// <reference types="vite/client" />
+import type { ReactNode } from "react";
 import {
   HeadContent,
   Outlet,
   Scripts,
-  createRootRouteWithContext,
-  useRouteContext,
+  createRootRoute,
 } from "@tanstack/react-router";
-import * as React from "react";
-import { createServerFn } from "@tanstack/react-start";
-import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
-import type { ConvexQueryClient } from "@convex-dev/react-query";
-import type { QueryClient } from "@tanstack/react-query";
 import appCss from "~/styles.css?url";
-import { authClient } from "~/lib/auth-client";
-import { getToken } from "~/lib/auth-server";
 
-const getAuth = createServerFn({ method: "GET" }).handler(async () => {
-  return await getToken();
-});
-
-export const Route = createRootRouteWithContext<{
-  queryClient: QueryClient;
-  convexQueryClient: ConvexQueryClient;
-}>()({
+export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "CourtCase Companion" },
+      { title: "BenchMemo" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -37,32 +23,18 @@ export const Route = createRootRouteWithContext<{
       },
     ],
   }),
-  beforeLoad: async (ctx) => {
-    const token = await getAuth();
-    if (token) {
-      ctx.context.convexQueryClient.serverHttpClient?.setAuth(token);
-    }
-    return { isAuthenticated: !!token, token };
-  },
   component: RootComponent,
 });
 
 function RootComponent() {
-  const context = useRouteContext({ from: Route.id });
   return (
-    <ConvexBetterAuthProvider
-      client={context.convexQueryClient.convexClient}
-      authClient={authClient}
-      initialToken={context.token}
-    >
-      <RootDocument>
-        <Outlet />
-      </RootDocument>
-    </ConvexBetterAuthProvider>
+    <RootDocument>
+      <Outlet />
+    </RootDocument>
   );
 }
 
-function RootDocument({ children }: { children: React.ReactNode }) {
+function RootDocument({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>

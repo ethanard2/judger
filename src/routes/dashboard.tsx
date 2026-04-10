@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useConvexQuery } from "@convex-dev/react-query";
+import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { authClient } from "~/lib/auth-client";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
@@ -9,51 +8,18 @@ export const Route = createFileRoute("/dashboard")({
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending: { label: "Pending", color: "bg-gray-100 text-gray-600" },
-  ingesting_docket: {
-    label: "Pulling docket...",
-    color: "bg-blue-100 text-blue-700",
-  },
-  ingesting_judge: {
-    label: "Pulling judge opinions...",
-    color: "bg-blue-100 text-blue-700",
-  },
-  analyzing_judge: {
-    label: "Analyzing judge...",
-    color: "bg-amber-100 text-amber-700",
-  },
-  analyzing_case: {
-    label: "Analyzing case...",
-    color: "bg-amber-100 text-amber-700",
-  },
+  ingesting_docket: { label: "Pulling docket...", color: "bg-blue-100 text-blue-700" },
+  ingesting_judge: { label: "Pulling judge opinions...", color: "bg-blue-100 text-blue-700" },
+  analyzing_judge: { label: "Analyzing judge...", color: "bg-amber-100 text-amber-700" },
+  analyzing_case: { label: "Analyzing case...", color: "bg-amber-100 text-amber-700" },
   ready: { label: "Ready", color: "bg-green-100 text-green-700" },
   error: { label: "Error", color: "bg-red-100 text-red-700" },
 };
 
 function DashboardPage() {
-  const session = authClient.useSession();
   const navigate = useNavigate();
-
-  const cases = useConvexQuery(
-    api.cases.listByUser,
-    session.data ? {} : "skip",
-  );
+  const cases = useQuery(api.cases.listByUser, {});
   const isLoading = cases === undefined;
-
-  if (!session.data) {
-    return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-500 mb-4">Sign in to view your cases</p>
-          <button
-            onClick={() => navigate({ to: "/sign-in" })}
-            className="bg-primary text-white px-6 py-2 rounded-lg"
-          >
-            Sign In
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-surface">
@@ -62,19 +28,8 @@ function DashboardPage() {
           onClick={() => navigate({ to: "/" })}
           className="text-primary text-xl font-bold"
         >
-          CourtCase Companion
+          BenchMemo
         </button>
-        <div className="flex items-center gap-4">
-          <span className="text-gray-500 text-sm">
-            {session.data.user.email}
-          </span>
-          <button
-            onClick={() => authClient.signOut()}
-            className="text-gray-400 hover:text-gray-600 text-sm"
-          >
-            Sign out
-          </button>
-        </div>
       </nav>
 
       <div className="max-w-4xl mx-auto px-8 py-8">

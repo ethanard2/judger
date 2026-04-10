@@ -4,10 +4,6 @@ import { query, internalQuery, internalMutation } from "./_generated/server";
 export const byCase = query({
   args: { caseId: v.id("cases") },
   handler: async (ctx, { caseId }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
-    const caseRecord = await ctx.db.get(caseId);
-    if (!caseRecord || caseRecord.userId !== identity.subject) return [];
     return ctx.db
       .query("docketEntries")
       .withIndex("by_case", (q) => q.eq("caseId", caseId))

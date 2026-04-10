@@ -13,14 +13,10 @@ export const sendMessage = action({
     message: v.string(),
   },
   handler: async (ctx, { caseId, message }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-
     const caseRecord = await ctx.runQuery(internal.cases.getInternal, {
       id: caseId,
     });
     if (!caseRecord) throw new Error("Case not found");
-    if (caseRecord.userId !== identity.subject) throw new Error("Unauthorized");
     if (caseRecord.status !== "ready") {
       throw new Error("Case analysis is not ready yet");
     }
@@ -85,7 +81,7 @@ export const sendMessage = action({
 
     await ctx.runMutation(internal.conversations.appendMessages, {
       caseId,
-      userId: identity.subject,
+      userId: "default",
       messages: [
         { role: "user", content: message, timestamp: Date.now() },
         { role: "assistant", content: response, timestamp: Date.now() },

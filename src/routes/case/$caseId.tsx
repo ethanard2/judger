@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useConvexQuery, useConvexAction } from "@convex-dev/react-query";
+import { useQuery, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useState, useRef, useEffect } from "react";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -9,344 +9,331 @@ export const Route = createFileRoute("/case/$caseId")({
   component: CasePage,
 });
 
-type Tab = "analysis" | "judge" | "docket" | "chat";
+const TABS = ["Profile", "Motion Analytics", "Behavioral Analysis", "Precedents", "Chat"] as const;
+type Tab = (typeof TABS)[number];
 
 function CasePage() {
   const { caseId } = Route.useParams();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<Tab>("analysis");
+  const [activeTab, setActiveTab] = useState<Tab>("Profile");
 
-  const detail = useConvexQuery(api.cases.getDetail, {
-    id: caseId as Id<"cases">,
-  });
+  const detail = useQuery(api.cases.getDetail, { id: caseId as Id<"cases"> });
 
   if (detail === undefined) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
-        <p className="text-gray-400">Loading case...</p>
+      <div className="min-h-screen bg-[#FAFAF7] flex items-center justify-center">
+        <p className="text-gray-400 font-sans">Loading case...</p>
       </div>
     );
   }
 
   if (detail === null) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
-        <p className="text-gray-500">Case not found</p>
+      <div className="min-h-screen bg-[#FAFAF7] flex items-center justify-center">
+        <p className="text-gray-500 font-sans">Case not found</p>
       </div>
     );
   }
 
   const { case: caseRecord, judge, docketEntries, conversation } = detail;
-  const isProcessing =
-    caseRecord.status !== "ready" && caseRecord.status !== "error";
+  const isProcessing = caseRecord.status !== "ready" && caseRecord.status !== "error";
+  const profile = parseJudgeProfile(judge?.profile);
 
   return (
-    <div className="min-h-screen bg-surface">
-      <nav className="bg-white border-b border-gray-200 px-8 py-4 flex items-center gap-4">
-        <button
-          onClick={() => navigate({ to: "/dashboard" })}
-          className="text-primary text-xl font-bold"
-        >
-          CourtCase Companion
-        </button>
-        <span className="text-gray-300">/</span>
-        <span className="text-gray-600 text-sm truncate">
-          {caseRecord.caseName ?? caseRecord.caseNumber}
-        </span>
-      </nav>
-
-      <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          {caseRecord.caseName ?? caseRecord.caseNumber}
-        </h1>
-        <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-          <span>{caseRecord.caseNumber}</span>
-          <span>&middot;</span>
-          <span>{caseRecord.courtName}</span>
-          {judge && (
-            <>
-              <span>&middot;</span>
-              <span>Judge {judge.name}</span>
-            </>
-          )}
-        </div>
-
-        {isProcessing && (
-          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full" />
-              <span className="text-blue-700 text-sm">
-                {caseRecord.statusMessage ?? "Processing..."}
-              </span>
+    <div className="min-h-screen bg-[#FAFAF7] font-serif text-[#1a1a1a]">
+      {/* Header */}
+      <div className="bg-gradient-to-br from-[#1B2A4A] to-[#2C3E6B] px-10 py-8 text-white">
+        <div className="flex justify-between items-start">
+          <div>
+            <button
+              onClick={() => navigate({ to: "/dashboard" })}
+              className="text-[11px] tracking-[2px] uppercase opacity-60 font-sans mb-2 hover:opacity-80 transition"
+            >
+              &larr; BenchMemo
+            </button>
+            <h1 className="text-[28px] font-normal tracking-tight m-0">
+              {judge ? `Hon. ${judge.name}` : "Judge Pending"}
+            </h1>
+            <div className="text-[15px] opacity-80 font-sans mt-1">
+              {caseRecord.courtName}
             </div>
           </div>
-        )}
-
-        {caseRecord.status === "error" && (
-          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
-            <span className="text-red-700 text-sm">
-              {caseRecord.statusMessage ?? "An error occurred"}
-            </span>
+          <div className="text-right font-sans text-[13px] opacity-70">
+            {judge?.appointedBy && <div>Appointed by {judge.appointedBy}</div>}
+            {profile?.atAGlance?.opinionsAnalyzed && (
+              <div className="mt-1">Based on {profile.atAGlance.opinionsAnalyzed} opinions analyzed</div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
 
-      <div className="bg-white border-b border-gray-200 px-8">
-        <div className="flex gap-6">
-          {(
-            [
-              { id: "analysis", label: "Case Analysis" },
-              { id: "judge", label: "Judge Profile" },
-              { id: "docket", label: "Docket" },
-              { id: "chat", label: "Chat" },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-3 text-sm font-medium border-b-2 transition ${
-                activeTab === tab.id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Case Context Bar */}
+        <div className="mt-5 px-4 py-3 bg-white/10 rounded-md font-sans text-[13px] flex gap-6 flex-wrap">
+          <span><strong>{caseRecord.caseName ?? caseRecord.caseNumber}</strong></span>
+          <span>{caseRecord.caseNumber}</span>
+          {caseRecord.natureOfSuit && <span>{caseRecord.natureOfSuit}</span>}
+          {isProcessing && (
+            <span className="ml-auto opacity-70 flex items-center gap-2">
+              <span className="w-2 h-2 bg-white/60 rounded-full animate-pulse" />
+              {caseRecord.statusMessage ?? "Processing..."}
+            </span>
+          )}
+          {caseRecord.status === "error" && (
+            <span className="ml-auto text-red-300">{caseRecord.statusMessage ?? "Error"}</span>
+          )}
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-8 py-8">
-        {activeTab === "analysis" && (
-          <AnalysisTab analysis={caseRecord.caseAnalysis} />
-        )}
-        {activeTab === "judge" && (
-          <JudgeTab judge={judge} />
-        )}
-        {activeTab === "docket" && (
-          <DocketTab entries={docketEntries ?? []} />
-        )}
-        {activeTab === "chat" && (
-          <ChatTab
+      {/* Tab Bar */}
+      <div className="flex border-b border-gray-300 bg-white px-10 font-sans text-[13px]">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-5 py-3.5 border-b-2 transition-all ${
+              activeTab === tab
+                ? "border-[#1B2A4A] text-[#1B2A4A] font-semibold"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="px-10 py-8 max-w-[960px]">
+        {activeTab === "Profile" && <ProfileTab profile={profile} judge={judge} caseRecord={caseRecord} />}
+        {activeTab === "Motion Analytics" && <MotionAnalyticsTab profile={profile} />}
+        {activeTab === "Behavioral Analysis" && <BehavioralAnalysisTab profile={profile} />}
+        {activeTab === "Precedents" && <PrecedentsTab profile={profile} />}
+        {activeTab === "Chat" && (
+          <ChatTabView
             caseId={caseId as Id<"cases">}
             ready={caseRecord.status === "ready"}
             messages={conversation?.messages ?? []}
+            judgeName={judge?.name}
+            opinionsCount={profile?.atAGlance?.opinionsAnalyzed}
           />
         )}
       </div>
-    </div>
-  );
-}
 
-function AnalysisTab({ analysis }: { analysis?: string }) {
-  if (!analysis) {
-    return (
-      <div className="text-center py-12 text-gray-400">
-        Analysis not yet available.
-      </div>
-    );
-  }
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-8">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">
-        Strategic Analysis
-      </h2>
-      <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
-        {analysis}
+      {/* Disclaimer */}
+      <div className="px-10 py-4 border-t border-gray-200 text-[11px] text-gray-400 font-sans leading-relaxed">
+        This analysis is based on patterns in publicly available court data. It is not legal advice.
+        All observations should be independently verified.
       </div>
     </div>
   );
 }
 
-function JudgeTab({ judge }: { judge: any }) {
-  if (!judge?.profile) {
-    return (
-      <div className="text-center py-12 text-gray-400">
-        Judge profile not yet available.
-      </div>
-    );
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-xl font-normal mb-5 pb-2 border-b border-gray-200">
+      {children}
+    </h2>
+  );
+}
+
+function Callout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="bg-[#F5F0E8] border border-[#E0D9CC] rounded p-5 text-sm leading-[1.8] font-sans">
+      {children}
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="bg-white border border-[#e8e8e4] rounded p-4">
+      <div className="text-[11px] uppercase tracking-[1.5px] text-gray-400 font-sans mb-2">{label}</div>
+      <div className="text-[28px] font-light text-[#1B2A4A] font-sans">{value}</div>
+      {sub && <div className="text-[12px] text-gray-400 font-sans mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+function ProfileTab({ profile, judge, caseRecord }: { profile: JudgeProfile | null; judge: any; caseRecord: any }) {
+  if (!profile && !judge) {
+    return <div className="text-center py-12 text-gray-400 font-sans">Profile not yet available.</div>;
   }
 
-  const profile = parseJudgeProfile(judge.profile);
-
-  if (!profile) {
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-8">
-        <div className="text-gray-700 whitespace-pre-wrap">{judge.profile}</div>
-      </div>
-    );
-  }
+  const glance = profile?.atAGlance;
 
   return (
-    <div className="space-y-6">
-      {/* Overview */}
-      <div className="bg-white rounded-xl border border-gray-200 p-8">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">
-          Judge {profile.judgeName ?? judge.name}
-        </h2>
-        <div className="flex gap-4 text-sm text-gray-500 mb-4">
-          {profile.bio?.appointedBy && (
-            <span>Appointed by {profile.bio.appointedBy}</span>
-          )}
-          {judge.opinionCount != null && (
-            <span>{judge.opinionCount} opinions analyzed</span>
-          )}
-        </div>
-        {profile.overview && (
-          <p className="text-sm text-gray-700">{profile.overview}</p>
-        )}
-      </div>
+    <div>
+      {profile?.overview && (
+        <>
+          <SectionTitle>Overview</SectionTitle>
+          <p className="text-[15px] leading-[1.7] text-gray-700 font-sans">{profile.overview}</p>
+        </>
+      )}
 
-      {/* Grant/Deny Rates */}
-      {profile.grantRates && profile.grantRates.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8">
-          <h3 className="text-md font-semibold text-gray-900 mb-4">
-            Grant/Deny Rates by Motion Type
-          </h3>
-          <div className="space-y-3">
-            {profile.grantRates.map((rate) => (
-              <div key={rate.motionType}>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="font-medium text-gray-800">
-                    {rate.motionType}
-                  </span>
-                  <span className="text-gray-500 text-xs">
-                    {rate.sampleSize ?? 0} cases &middot;{" "}
-                    {rate.grantRate ?? 0}% grant rate
-                  </span>
-                </div>
-                <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                  {(rate.granted ?? 0) > 0 && (
-                    <div
-                      className="bg-green-500 h-full"
-                      style={{
-                        width: `${((rate.granted ?? 0) / (rate.sampleSize ?? 1)) * 100}%`,
-                      }}
-                    />
-                  )}
-                  {(rate.mixed ?? 0) > 0 && (
-                    <div
-                      className="bg-amber-400 h-full"
-                      style={{
-                        width: `${((rate.mixed ?? 0) / (rate.sampleSize ?? 1)) * 100}%`,
-                      }}
-                    />
-                  )}
-                  {(rate.denied ?? 0) > 0 && (
-                    <div
-                      className="bg-red-400 h-full"
-                      style={{
-                        width: `${((rate.denied ?? 0) / (rate.sampleSize ?? 1)) * 100}%`,
-                      }}
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
-            <div className="flex gap-4 text-xs text-gray-400 mt-2">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500" /> Granted
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-amber-400" /> Partial
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-400" /> Denied
-              </span>
-            </div>
+      {glance && (
+        <div className="mt-8">
+          <SectionTitle>At a Glance</SectionTitle>
+          <div className="grid grid-cols-3 gap-4">
+            {glance.avgOpinionLengthPages && (
+              <StatCard label="Avg. Opinion Length" value={`${glance.avgOpinionLengthPages} pages`} />
+            )}
+            {glance.msjGrantRate && <StatCard label="MSJ Grant Rate" value={glance.msjGrantRate} />}
+            {glance.mtdGrantRate && <StatCard label="MTD Grant Rate" value={glance.mtdGrantRate} />}
+            {profile?.timeline?.avgMSJDecision && (
+              <StatCard label="Avg. MSJ Decision Time" value={profile.timeline.avgMSJDecision} />
+            )}
+            {glance.opinionsAnalyzed && (
+              <StatCard label="Opinions Analyzed" value={String(glance.opinionsAnalyzed)} sub={glance.dateRange} />
+            )}
+            {glance.suaSponteRate && (
+              <StatCard label="Sua Sponte Issues Raised" value={glance.suaSponteRate} sub="of opinions analyzed" />
+            )}
           </div>
         </div>
       )}
 
-      {/* Tendencies + Preferences + Red Flags in grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {profile.keyTendencies && profile.keyTendencies.length > 0 && (
-          <ProfileSection title="Key Tendencies" items={profile.keyTendencies} />
-        )}
-        {profile.proceduralPreferences &&
-          profile.proceduralPreferences.length > 0 && (
-            <ProfileSection
-              title="Procedural Preferences"
-              items={profile.proceduralPreferences}
-            />
-          )}
-        {profile.redFlags && profile.redFlags.length > 0 && (
-          <ProfileSection
-            title="Red Flags"
-            items={profile.redFlags}
-            variant="danger"
-          />
-        )}
-        {profile.citedPrecedents && profile.citedPrecedents.length > 0 && (
-          <ProfileSection
-            title="Most Cited Precedents"
-            items={profile.citedPrecedents}
-          />
-        )}
-      </div>
+      {caseRecord.caseAnalysis && (
+        <div className="mt-8">
+          <SectionTitle>Strategic Analysis</SectionTitle>
+          <Callout>
+            <div className="whitespace-pre-wrap">{caseRecord.caseAnalysis}</div>
+          </Callout>
+        </div>
+      )}
+
+      {/* Fallback for legacy profiles without atAGlance */}
+      {!glance && profile?.grantRates && profile.grantRates.length > 0 && (
+        <div className="mt-8">
+          <SectionTitle>Grant/Deny Rates</SectionTitle>
+          <div className="grid grid-cols-3 gap-4">
+            {profile.grantRates.map((r, i) => (
+              <StatCard key={i} label={r.motionType} value={`${r.grantRate ?? 0}%`} sub={`${r.sampleSize ?? 0} cases`} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ProfileSection({
-  title,
-  items,
-  variant,
-}: {
-  title: string;
-  items: string[];
-  variant?: "danger";
-}) {
+function MotionAnalyticsTab({ profile }: { profile: JudgeProfile | null }) {
+  const stats = profile?.motionStats;
+  if (!stats || stats.length === 0) {
+    return <div className="text-center py-12 text-gray-400 font-sans">Motion analytics not yet available.</div>;
+  }
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h3 className="text-md font-semibold text-gray-900 mb-3">{title}</h3>
-      <ul className="space-y-2">
-        {items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm">
-            <span
-              className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
-                variant === "danger" ? "bg-red-400" : "bg-primary"
-              }`}
-            />
-            <span className="text-gray-700">{item}</span>
-          </li>
-        ))}
-      </ul>
+    <div>
+      <SectionTitle>Motion Outcomes</SectionTitle>
+      <table className="w-full border-collapse font-sans text-[13px]">
+        <thead>
+          <tr className="border-b-2 border-[#1B2A4A]">
+            <th className="text-left p-2.5 font-semibold">Motion Type</th>
+            <th className="text-center p-2.5 font-semibold text-green-800">Granted</th>
+            <th className="text-center p-2.5 font-semibold text-amber-700">Partial</th>
+            <th className="text-center p-2.5 font-semibold text-red-800">Denied</th>
+            <th className="text-center p-2.5 font-semibold">Total</th>
+            <th className="text-center p-2.5 font-semibold">Grant Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {stats.map((row, i) => {
+            const rate = parseInt(row.rate) || 0;
+            return (
+              <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-[#FAFAF7]"}`}>
+                <td className="p-2.5 font-medium">{row.type}</td>
+                <td className="text-center p-2.5 text-green-800">{row.granted}</td>
+                <td className="text-center p-2.5 text-amber-700">{row.partial}</td>
+                <td className="text-center p-2.5 text-red-800">{row.denied}</td>
+                <td className="text-center p-2.5">{row.total}</td>
+                <td className="text-center p-2.5">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-[60px] h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${rate > 55 ? "bg-green-700" : rate > 40 ? "bg-amber-600" : "bg-red-700"}`}
+                        style={{ width: `${rate}%` }}
+                      />
+                    </div>
+                    <span className="font-semibold min-w-[32px]">{row.rate}</span>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function DocketTab({ entries }: { entries: any[] }) {
-  if (entries.length === 0) {
+function BehavioralAnalysisTab({ profile }: { profile: JudgeProfile | null }) {
+  const sections = [
+    { title: "Analytical Style", items: profile?.analyticalStyle },
+    { title: "Summary Judgment Tendencies", items: profile?.summaryJudgment },
+    { title: "Procedural Requirements", items: profile?.proceduralPreferences },
+    { title: "Discovery Approach", items: profile?.discoveryApproach },
+    { title: "Tone & Temperament", items: profile?.tonalNotes },
+    // Fallback for legacy profiles
+    { title: "Key Tendencies", items: profile?.keyTendencies },
+    { title: "Red Flags", items: profile?.redFlags },
+  ].filter((s) => s.items && s.items.length > 0);
+
+  if (sections.length === 0) {
+    return <div className="text-center py-12 text-gray-400 font-sans">Behavioral analysis not yet available.</div>;
+  }
+
+  return (
+    <div>
+      {sections.map((section, i) => (
+        <div key={i} className="mb-8">
+          <h2 className="text-lg font-normal mb-4 pb-2 border-b border-gray-200">{section.title}</h2>
+          {section.items!.map((item, j) => (
+            <div
+              key={j}
+              className={`py-3 text-sm leading-[1.7] font-sans text-gray-700 flex gap-3 ${
+                j < section.items!.length - 1 ? "border-b border-gray-100" : ""
+              }`}
+            >
+              <span className="text-[#1B2A4A] font-bold shrink-0 mt-0.5">&rsaquo;</span>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PrecedentsTab({ profile }: { profile: JudgeProfile | null }) {
+  const precedents = profile?.topPrecedents;
+
+  // Fallback for legacy string array
+  if (!precedents && profile?.citedPrecedents) {
     return (
-      <div className="text-center py-12 text-gray-400">
-        No docket entries yet.
+      <div>
+        <SectionTitle>Most Cited Precedents</SectionTitle>
+        {profile.citedPrecedents.map((p, i) => (
+          <div key={i} className="bg-white border border-[#e8e8e4] rounded p-4 mb-3 font-sans text-sm text-[#1B2A4A] font-semibold">
+            {p}
+          </div>
+        ))}
       </div>
     );
   }
 
+  if (!precedents || precedents.length === 0) {
+    return <div className="text-center py-12 text-gray-400 font-sans">Precedent data not yet available.</div>;
+  }
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-      {entries.map((entry: any, i: number) => (
-        <div key={entry._id ?? i} className="px-6 py-4">
-          <div className="flex items-start gap-4">
-            <span className="text-xs text-gray-400 font-mono w-8 shrink-0 pt-0.5">
-              {entry.entryNumber ?? "\u2014"}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-sm text-gray-900">{entry.description}</p>
-                {entry.documentType &&
-                  entry.documentType !== "filing" && (
-                    <span className="text-[10px] font-medium bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded shrink-0">
-                      {entry.documentType.replace(/_/g, " ")}
-                    </span>
-                  )}
-              </div>
-              {entry.dateFiled && (
-                <p className="text-xs text-gray-400 mt-1">{entry.dateFiled}</p>
-              )}
-            </div>
+    <div>
+      <SectionTitle>Most Frequently Cited Authorities</SectionTitle>
+      {precedents.map((p, i) => (
+        <div key={i} className="bg-white border border-[#e8e8e4] rounded p-4 mb-3 flex gap-5 items-start">
+          <div className="bg-[#1B2A4A] text-white rounded-full w-9 h-9 flex items-center justify-center font-sans text-sm font-semibold shrink-0">
+            {p.count}
+          </div>
+          <div>
+            <div className="text-sm font-semibold font-sans text-[#1B2A4A]">{p.case}</div>
+            <div className="text-[13px] text-gray-500 font-sans mt-1">{p.context}</div>
           </div>
         </div>
       ))}
@@ -354,24 +341,24 @@ function DocketTab({ entries }: { entries: any[] }) {
   );
 }
 
-function ChatTab({
+function ChatTabView({
   caseId,
   ready,
   messages,
+  judgeName,
+  opinionsCount,
 }: {
   caseId: Id<"cases">;
   ready: boolean;
-  messages: Array<{
-    role: "user" | "assistant";
-    content: string;
-    timestamp: number;
-  }>;
+  messages: Array<{ role: "user" | "assistant"; content: string; timestamp: number }>;
+  judgeName?: string;
+  opinionsCount?: number;
 }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const sendMessageAction = useConvexAction(api.chat.sendMessage);
+  const sendMessageAction = useAction(api.chat.sendMessage);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -394,29 +381,31 @@ function ChatTab({
   };
 
   if (!ready) {
-    return (
-      <div className="text-center py-12 text-gray-400">
-        Chat will be available once the case analysis is complete.
-      </div>
-    );
+    return <div className="text-center py-12 text-gray-400 font-sans">Chat will be available once analysis is complete.</div>;
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 flex flex-col h-[600px]">
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+    <div className="bg-white border border-[#e8e8e4] rounded-md overflow-hidden">
+      <div className="px-5 py-3 bg-[#F5F5F2] border-b border-[#e8e8e4] font-sans text-[12px] text-gray-400">
+        Litigation Companion
+        {opinionsCount && <> &middot; Grounded in {opinionsCount} opinions</>}
+        {judgeName && <> by Judge {judgeName}</>}
+        &middot; Not legal advice
+      </div>
+      <div className="max-h-[600px] overflow-y-auto p-5 space-y-5">
         {messages.length === 0 && !sending && (
-          <div className="text-center py-8 text-gray-400 text-sm">
-            <p className="mb-4">Ask me anything about your case or judge.</p>
+          <div className="text-center py-8 text-gray-400 text-sm font-sans">
+            <p className="mb-4">Ask about the judge's patterns, your case strategy, or request a draft.</p>
             <div className="space-y-2 text-left max-w-md mx-auto">
               {[
-                "How does this judge handle summary judgment motions?",
-                "What should I expect from opposing counsel's next move?",
+                "How does this judge handle summary judgment in contract disputes?",
+                "What procedural requirements should I be aware of?",
                 "Draft my opposition brief structured for this judge.",
               ].map((q) => (
                 <button
                   key={q}
                   onClick={() => setInput(q)}
-                  className="block w-full text-left px-4 py-2 rounded-lg border border-gray-200 hover:border-primary/30 hover:bg-primary/5 text-gray-600 text-xs transition"
+                  className="block w-full text-left px-4 py-2 rounded border border-gray-200 hover:border-[#1B2A4A]/30 hover:bg-[#1B2A4A]/5 text-gray-600 text-xs transition font-sans"
                 >
                   &ldquo;{q}&rdquo;
                 </button>
@@ -426,25 +415,26 @@ function ChatTab({
         )}
 
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
+          <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+            <div className="text-[11px] uppercase tracking-[1px] text-gray-400 font-sans mb-1.5">
+              {msg.role === "user" ? "You" : "Companion"}
+            </div>
             <div
-              className={`max-w-[80%] rounded-xl px-4 py-3 text-sm ${
+              className={`max-w-[85%] px-4 py-3.5 text-[13.5px] leading-[1.7] font-sans whitespace-pre-wrap ${
                 msg.role === "user"
-                  ? "bg-primary text-white"
-                  : "bg-gray-100 text-gray-800"
+                  ? "bg-[#1B2A4A] text-white rounded-xl rounded-br-sm"
+                  : "bg-[#F8F8F5] text-[#1a1a1a] rounded-xl rounded-bl-sm"
               }`}
             >
-              <div className="whitespace-pre-wrap">{msg.content}</div>
+              {msg.content}
             </div>
           </div>
         ))}
 
         {sending && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-xl px-4 py-3">
+          <div className="flex flex-col items-start">
+            <div className="text-[11px] uppercase tracking-[1px] text-gray-400 font-sans mb-1.5">Companion</div>
+            <div className="bg-[#F8F8F5] rounded-xl rounded-bl-sm px-4 py-3.5">
               <div className="flex gap-1">
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.1s]" />
@@ -457,30 +447,25 @@ function ChatTab({
         <div ref={messagesEndRef} />
       </div>
 
-      <form
-        onSubmit={handleSend}
-        className="border-t border-gray-200 p-4 flex gap-3"
-      >
+      <form onSubmit={handleSend} className="px-5 py-4 border-t border-[#e8e8e4] flex gap-3">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about your case or judge..."
-          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
+          placeholder={`Ask about ${judgeName ? `Judge ${judgeName}'s` : "the judge's"} patterns, your case strategy...`}
+          className="flex-1 px-3.5 py-2.5 border border-gray-300 rounded-md font-sans text-[13px] outline-none focus:border-[#1B2A4A]"
           disabled={sending}
         />
         <button
           type="submit"
           disabled={!input.trim() || sending}
-          className="bg-primary hover:bg-primary-light text-white px-6 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+          className="px-5 py-2.5 bg-[#1B2A4A] text-white rounded-md font-sans text-[13px] disabled:opacity-50 transition"
         >
           Send
         </button>
       </form>
 
-      {sendError && (
-        <p className="px-4 pb-3 text-xs text-red-600">{sendError}</p>
-      )}
+      {sendError && <p className="px-5 pb-3 text-xs text-red-600 font-sans">{sendError}</p>}
     </div>
   );
 }
