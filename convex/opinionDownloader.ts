@@ -135,3 +135,57 @@ export const downloadPendingTexts = internalAction({
     }
   },
 });
+
+// Backfill: fetch HTML for opinions that have text but no HTML.
+// Processes in batches, self-schedules for remaining.
+export const backfillHtml = internalAction({
+  args: { judgeId: v.id("judges") },
+  handler: async (ctx, { judgeId }) => {
+    const BATCH_SIZE = 10;
+
+    const missing = await ctx.runQuery(internal.judgeOpinions.missingHtml, {
+      judgeId,
+    });
+
+    if (missing.length === 0) {
+      console.log(`[backfill] No opinions missing HTML. Done.`);
+      return;
+    }
+
+    console.log(`[backfill] ${missing.length} opinions need HTML. Processing batch...`);
+
+    const batch = missing.slice(0, BATCH_SIZE);
+    let filled = 0;
+
+    for (const op of batch) {
+      const opinionId = op.courtListenerOpinionId ?? op.courtListenerClusterId;
+      try {
+        const full = await courtListenerFetch<any>(
+          `/api/rest/v4/opinions/${opinionId}/`,
+        );
+        const html = full.html_with_citations || full.html || null;
+
+        if (html) {
+          await ctx.runMutation(internal.judgeOpinions.writeHtml, {
+            id: op._id,
+            opinionHtml: html.slice(0, 500000),
+          });
+          filled++;
+          console.log(`  [${filled}] ${op.caseName ?? "?"} | ${html.length} chars HTML`);
+        }
+      } catch (err) {
+        console.warn(`  [error] opinion ${opinionId}: ${err}`);
+      }
+    }
+
+    const remaining = missing.length - batch.length;
+    if (remaining > 0) {
+      console.log(`[backfill] ${filled} filled. ${remaining} remaining. Scheduling next batch...`);
+      await ctx.scheduler.runAfter(0, internal.opinionDownloader.backfillHtml, {
+        judgeId,
+      });
+    } else {
+      console.log(`[backfill] Complete. ${filled} filled in final batch.`);
+    }
+  },
+});

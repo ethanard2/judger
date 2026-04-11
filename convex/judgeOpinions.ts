@@ -56,6 +56,29 @@ export const pendingDownloads = internalQuery({
   },
 });
 
+// Find opinions that have text but no HTML (need backfill)
+export const missingHtml = internalQuery({
+  args: { judgeId: v.id("judges") },
+  handler: async (ctx, { judgeId }) => {
+    const all = await ctx.db
+      .query("judgeOpinions")
+      .withIndex("by_judge", (q) => q.eq("judgeId", judgeId))
+      .collect();
+    return all.filter((op) => op.opinionText && !op.opinionHtml);
+  },
+});
+
+// Write HTML only (for backfill)
+export const writeHtml = internalMutation({
+  args: {
+    id: v.id("judgeOpinions"),
+    opinionHtml: v.string(),
+  },
+  handler: async (ctx, { id, opinionHtml }) => {
+    await ctx.db.patch(id, { opinionHtml });
+  },
+});
+
 // Insert a ref (metadata only, no text yet). Skips if cluster ID already exists.
 export const insertRef = internalMutation({
   args: {
