@@ -72,11 +72,7 @@ export const sendMessage = action({
     }
 
     if (!response) {
-      response = buildFallbackChatResponse({
-        question: message,
-        caseName: caseRecord.caseName,
-        judgeProfileJson: judgeProfile,
-      });
+      response = buildFallbackChatResponse();
     }
 
     await ctx.runMutation(internal.conversations.appendMessages, {

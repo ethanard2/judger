@@ -124,64 +124,11 @@ function detectOutcome(text: string): string {
   return "Mixed";
 }
 
-export function buildHeuristicJudgeProfile(args: {
-  judgeName: string;
-  courtName?: string;
-  opinions: Array<{ opinionText: string }>;
-  bio?: { appointedBy?: string; birthYear?: number; activeStatus?: string } | null;
-}) {
-  const counts = new Map<
-    string,
-    { total: number; granted: number; denied: number; mixed: number }
-  >();
-
-  for (const op of args.opinions) {
-    const motionType = detectMotionType(op.opinionText);
-    const outcome = detectOutcome(op.opinionText);
-    const c = counts.get(motionType) ?? { total: 0, granted: 0, denied: 0, mixed: 0 };
-    c.total += 1;
-    if (outcome === "Granted") c.granted += 1;
-    if (outcome === "Denied") c.denied += 1;
-    if (outcome === "Granted in part" || outcome === "Mixed") c.mixed += 1;
-    counts.set(motionType, c);
-  }
-
-  const grantRates = [...counts.entries()].map(([motionType, s]) => ({
-    motionType,
-    sampleSize: s.total,
-    granted: s.granted,
-    denied: s.denied,
-    mixed: s.mixed,
-    grantRate: Math.round(((s.granted + s.mixed * 0.5) / s.total) * 100),
-  }));
-
+export function buildNoDataProfile(judgeName: string, courtName?: string) {
   return {
-    judgeName: args.judgeName,
-    courtName: args.courtName,
-    bio: args.bio ?? null,
-    overview: `${args.judgeName} tends to reward disciplined briefing, clear sequencing, and a concrete evidentiary record. Profile built from ${args.opinions.length} opinions.`,
-    grantRates,
-    keyTendencies: [
-      "Prefers targeted, proportional requests over sprawling asks.",
-      "Responds well to briefs that front-load procedural posture and requested relief.",
-      "Uses orders to narrow disputes before reaching broader merits questions.",
-    ],
-    proceduralPreferences: [
-      "Narrow discovery disputes before conference practice.",
-      "Use a tight chronology and cite the record precisely.",
-      "Separate threshold defects from fact-intensive arguments.",
-    ],
-    redFlags: [
-      "Overbroad requests without burden analysis.",
-      "Arguments that skip the governing standard.",
-      "Heavy rhetoric unsupported by citations.",
-    ],
-    citedPrecedents: [
-      "Celotex Corp. v. Catrett",
-      "Ashcroft v. Iqbal",
-      "Bell Atl. Corp. v. Twombly",
-      "Fed. R. Civ. P. 26(b)(1)",
-    ],
+    judgeName,
+    courtName,
+    overview: `We were unable to find sufficient opinion data for ${judgeName} in public court records. This may mean the judge's opinions are not yet available in the CourtListener database, or the judge is relatively new to the bench. The chat companion can still answer general questions, but judge-specific behavioral analysis is not available.`,
   };
 }
 
@@ -189,45 +136,15 @@ export function buildFallbackCaseAnalysis(args: {
   caseName?: string;
   caseNumber: string;
   courtName: string;
-  judgeProfileJson?: string;
-  docketEntries: Array<{ description: string }>;
 }) {
-  const profile = safeJsonParse<any>(args.judgeProfileJson, null);
-  const latest = args.docketEntries.at(-1)?.description ?? "recent activity";
+  return `Analysis for ${args.caseName ?? args.caseNumber} in ${args.courtName} could not be generated. This is typically because:
 
-  return `Case posture assessment
-${args.caseName ?? args.caseNumber} in ${args.courtName} is in the early-to-middle motion phase. Latest docket activity: ${latest}.
+- The AI analysis service is temporarily unavailable
+- Insufficient judge opinion data was found in public records
 
-Judge-specific risks
-${profile?.judgeName ?? "The assigned judge"} appears to punish overbreadth, thin citations, and diffuse narratives.
-
-Strategic recommendations
-Lead with procedural posture, frame a limited ask, and attach the record cites that do the work.
-
-Timeline prediction
-Expect the next inflection point to be a conference or targeted order before broader merits briefing.
-
-Key issues to watch
-- Whether the court narrows discovery before merits briefing
-- Whether evidentiary support is mature enough for early dispositive motion`;
+Please try again later, or use the chat to ask specific questions about your case.`;
 }
 
-export function buildFallbackChatResponse(args: {
-  question: string;
-  caseName?: string;
-  judgeProfileJson?: string;
-}) {
-  const profile = safeJsonParse<any>(args.judgeProfileJson, null);
-  const q = args.question.toLowerCase();
-
-  if (q.includes("motion to compel")) {
-    return `Based on the stored profile, ${profile?.judgeName ?? "this judge"} is likely to ask whether the request is proportionate, sequenced correctly, and supported by specific relevance showings. Prepare a short matrix tying each category to a concrete claim.`;
-  }
-  if (q.includes("summary judgment")) {
-    return `The profile points toward a judge who expects a disciplined Rule 56 presentation: clean statement of undisputed facts, tight record citations, and a narrow theory of relief.`;
-  }
-  if (q.includes("draft")) {
-    return `Draft structure for ${profile?.judgeName ?? "the assigned judge"}:\n1. One-paragraph procedural posture and precise relief requested.\n2. Governing standard with minimal exposition.\n3. Three tightly bounded argument sections anchored to record citations.\n4. Short prejudice/burden section.\n5. Practical conclusion telling the court exactly what order to enter.`;
-  }
-  return `The case file for ${args.caseName ?? "this matter"} is live. The working analysis is that ${profile?.judgeName ?? "the assigned judge"} values procedural clarity, narrow asks, and precise citations.`;
+export function buildFallbackChatResponse() {
+  return "I'm sorry, I wasn't able to generate a response. The AI service may be temporarily unavailable. Please try again in a moment.";
 }

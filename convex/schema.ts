@@ -86,12 +86,16 @@ export default defineSchema({
   judgeOpinions: defineTable({
     judgeId: v.id("judges"),
     courtListenerClusterId: v.number(),
+    courtListenerOpinionId: v.optional(v.number()),
     caseName: v.optional(v.string()),
     dateFiled: v.optional(v.string()),
     caseType: v.optional(v.string()),
-    opinionText: v.string(),
+    opinionText: v.optional(v.string()),    // stripped text (for LLM)
+    opinionHtml: v.optional(v.string()),   // original HTML (for display)
     extractedData: v.optional(v.string()),
-  }).index("by_judge", ["judgeId"]),
+  })
+    .index("by_judge", ["judgeId"])
+    .index("by_cluster", ["courtListenerClusterId"]),
 
   conversations: defineTable({
     caseId: v.id("cases"),

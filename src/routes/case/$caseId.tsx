@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useState, useRef, useEffect } from "react";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -9,7 +9,7 @@ export const Route = createFileRoute("/case/$caseId")({
   component: CasePage,
 });
 
-const TABS = ["Profile", "Motion Analytics", "Behavioral Analysis", "Precedents", "Chat"] as const;
+const TABS = ["Profile", "Motion Analytics", "Behavioral Analysis", "Precedents", "Opinions", "Chat"] as const;
 type Tab = (typeof TABS)[number];
 
 function CasePage() {
@@ -18,6 +18,7 @@ function CasePage() {
   const [activeTab, setActiveTab] = useState<Tab>("Profile");
 
   const detail = useQuery(api.cases.getDetail, { id: caseId as Id<"cases"> });
+  const refreshProfile = useMutation(api.cases.refreshJudgeProfile);
 
   if (detail === undefined) {
     return (
@@ -63,6 +64,14 @@ function CasePage() {
             {profile?.atAGlance?.opinionsAnalyzed && (
               <div className="mt-1">Based on {profile.atAGlance.opinionsAnalyzed} opinions analyzed</div>
             )}
+            {caseRecord.status === "ready" && (
+              <button
+                onClick={() => refreshProfile({ id: caseId as Id<"cases"> })}
+                className="mt-2 text-[11px] text-white/50 hover:text-white/80 transition underline"
+              >
+                Refresh judge profile
+              </button>
+            )}
           </div>
         </div>
 
@@ -106,6 +115,9 @@ function CasePage() {
         {activeTab === "Motion Analytics" && <MotionAnalyticsTab profile={profile} />}
         {activeTab === "Behavioral Analysis" && <BehavioralAnalysisTab profile={profile} />}
         {activeTab === "Precedents" && <PrecedentsTab profile={profile} />}
+        {activeTab === "Opinions" && judge && (
+          <OpinionsTab judgeId={judge._id} />
+        )}
         {activeTab === "Chat" && (
           <ChatTabView
             caseId={caseId as Id<"cases">}
@@ -337,6 +349,98 @@ function PrecedentsTab({ profile }: { profile: JudgeProfile | null }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function OpinionsTab({ judgeId }: { judgeId: Id<"judges"> }) {
+  const opinions = useQuery(api.judgeOpinions.listByJudge, { judgeId });
+  const [selectedId, setSelectedId] = useState<Id<"judgeOpinions"> | null>(null);
+  const selectedOpinion = useQuery(
+    api.judgeOpinions.getOpinion,
+    selectedId ? { id: selectedId } : "skip",
+  );
+
+  if (opinions === undefined) {
+    return <div className="text-center py-12 text-gray-400 font-sans">Loading opinions...</div>;
+  }
+
+  if (opinions.length === 0) {
+    return <div className="text-center py-12 text-gray-400 font-sans">No opinions found.</div>;
+  }
+
+  const sorted = [...opinions]
+    .filter((o) => o.hasText)
+    .sort((a, b) => (b.dateFiled ?? "").localeCompare(a.dateFiled ?? ""));
+
+  return (
+    <div className="flex gap-6 min-h-[600px]">
+      {/* Nav pane */}
+      <div className="w-[280px] shrink-0 bg-white border border-[#e8e8e4] rounded-md overflow-hidden">
+        <div className="px-4 py-3 bg-[#F5F5F2] border-b border-[#e8e8e4] font-sans text-[11px] uppercase tracking-[1.5px] text-gray-400">
+          {sorted.length} opinions
+        </div>
+        <div className="overflow-y-auto max-h-[560px]">
+          {sorted.map((op) => (
+            <button
+              key={op._id}
+              onClick={() => setSelectedId(op._id)}
+              className={`w-full text-left px-4 py-3 border-b border-gray-100 transition font-sans ${
+                selectedId === op._id
+                  ? "bg-[#1B2A4A]/5 border-l-2 border-l-[#1B2A4A]"
+                  : "hover:bg-gray-50"
+              }`}
+            >
+              <div className="text-[13px] font-medium text-gray-800 leading-tight">
+                {op.caseName ?? "Untitled"}
+              </div>
+              {op.dateFiled && (
+                <div className="text-[11px] text-gray-400 mt-1">{op.dateFiled}</div>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Opinion content */}
+      <div className="flex-1 bg-white border border-[#e8e8e4] rounded-md overflow-hidden">
+        {!selectedId && (
+          <div className="flex items-center justify-center h-full text-gray-400 font-sans text-sm">
+            Select an opinion to read
+          </div>
+        )}
+        {selectedId && selectedOpinion === undefined && (
+          <div className="flex items-center justify-center h-full text-gray-400 font-sans text-sm">
+            Loading...
+          </div>
+        )}
+        {selectedOpinion && (
+          <div className="overflow-y-auto max-h-[600px]">
+            <div className="px-6 py-4 bg-[#F5F5F2] border-b border-[#e8e8e4]">
+              <h3 className="font-semibold text-gray-900 font-sans text-[15px]">
+                {selectedOpinion.caseName ?? "Untitled"}
+              </h3>
+              {selectedOpinion.dateFiled && (
+                <div className="text-[12px] text-gray-400 font-sans mt-1">
+                  Filed {selectedOpinion.dateFiled}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4">
+              {selectedOpinion.opinionHtml ? (
+                <div
+                  className="prose prose-sm max-w-none font-serif text-[14px] leading-[1.8] text-gray-800"
+                  dangerouslySetInnerHTML={{ __html: selectedOpinion.opinionHtml }}
+                />
+              ) : (
+                <pre className="whitespace-pre-wrap font-sans text-[13px] text-gray-700 leading-[1.7]">
+                  {selectedOpinion.opinionText}
+                </pre>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

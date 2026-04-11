@@ -20,7 +20,7 @@ export function canUseClaude(): boolean {
 }
 
 export async function callClaude({
-  model = "claude-sonnet-4-20250514",
+  model = "claude-haiku-4-5-20251001",
   system,
   messages,
   maxTokens = 4096,

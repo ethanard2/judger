@@ -160,6 +160,32 @@ export const getDetail = query({
   },
 });
 
+export const refreshJudgeProfile = mutation({
+  args: { id: v.id("cases") },
+  handler: async (ctx, { id }) => {
+    const caseRecord = await ctx.db.get(id);
+    if (!caseRecord) throw new Error("Case not found");
+    if (!caseRecord.judgeId) throw new Error("No judge assigned");
+
+    // Reset judge profile
+    await ctx.db.patch(caseRecord.judgeId, {
+      profileStatus: "pending",
+      profile: undefined,
+      opinionCount: undefined,
+      lastAnalyzedAt: undefined,
+    });
+
+    // Reset case to re-analyze
+    await ctx.db.patch(id, {
+      status: "pending",
+      statusMessage: "Refreshing judge profile...",
+      caseAnalysis: undefined,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.ingest.ingestCase, { caseId: id });
+  },
+});
+
 export const updateAnalysis = internalMutation({
   args: {
     id: v.id("cases"),

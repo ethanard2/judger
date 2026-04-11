@@ -23,6 +23,7 @@ import type * as lib_courtlistener from "../lib/courtlistener.js";
 import type * as lib_mock from "../lib/mock.js";
 import type * as lib_prompts from "../lib/prompts.js";
 import type * as lib_utils from "../lib/utils.js";
+import type * as opinionDownloader from "../opinionDownloader.js";
 
 import type {
   ApiFromModules,
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   "lib/mock": typeof lib_mock;
   "lib/prompts": typeof lib_prompts;
   "lib/utils": typeof lib_utils;
+  opinionDownloader: typeof opinionDownloader;
 }>;
 
 /**

@@ -10,7 +10,7 @@ import {
   CASE_STRATEGIC_ANALYSIS_PROMPT,
 } from "./lib/prompts";
 import {
-  buildHeuristicJudgeProfile,
+  buildNoDataProfile,
   buildFallbackCaseAnalysis,
 } from "./lib/mock";
 import { extractJsonPayload, safeJsonParse } from "./lib/utils";
@@ -83,20 +83,12 @@ export const analyzeJudge = internalAction({
         }
       }
 
-      // Fallback to heuristic profile if Claude unavailable or failed
+      // If Claude unavailable or failed, be honest about it
       if (!profile) {
-        profile = buildHeuristicJudgeProfile({
-          judgeName: judge?.name ?? "Unknown Judge",
-          courtName: caseRecord?.courtName,
-          opinions,
-          bio: judge
-            ? {
-                appointedBy: judge.appointedBy,
-                birthYear: judge.birthYear,
-                activeStatus: judge.activeStatus,
-              }
-            : null,
-        });
+        profile = buildNoDataProfile(
+          judge?.name ?? "Unknown Judge",
+          caseRecord?.courtName,
+        );
       }
 
       await ctx.runMutation(internal.judges.updateProfile, {
@@ -170,8 +162,6 @@ export const analyzeCase = internalAction({
           caseName: caseRecord.caseName,
           caseNumber: caseRecord.caseNumber,
           courtName: caseRecord.courtName,
-          judgeProfileJson: judge?.profile,
-          docketEntries,
         });
       }
 

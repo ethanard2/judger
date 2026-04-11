@@ -1,7 +1,40 @@
 import { v } from "convex/values";
-import { internalQuery, internalMutation } from "./_generated/server";
+import { query, internalQuery, internalMutation } from "./_generated/server";
 
-export const byJudge = internalQuery({
+// Returns metadata only (no text/html) for the opinion list nav
+export const listByJudge = query({
+  args: { judgeId: v.id("judges") },
+  handler: async (ctx, { judgeId }) => {
+    const all = await ctx.db
+      .query("judgeOpinions")
+      .withIndex("by_judge", (q) => q.eq("judgeId", judgeId))
+      .collect();
+    return all.map((op) => ({
+      _id: op._id,
+      caseName: op.caseName,
+      dateFiled: op.dateFiled,
+      hasText: Boolean(op.opinionText && op.opinionText.length > 100),
+    }));
+  },
+});
+
+// Returns a single opinion with HTML for display
+export const getOpinion = query({
+  args: { id: v.id("judgeOpinions") },
+  handler: async (ctx, { id }) => {
+    const op = await ctx.db.get(id);
+    if (!op) return null;
+    return {
+      _id: op._id,
+      caseName: op.caseName,
+      dateFiled: op.dateFiled,
+      opinionHtml: op.opinionHtml,
+      opinionText: op.opinionText,
+    };
+  },
+});
+
+export const byJudgeInternal = internalQuery({
   args: { judgeId: v.id("judges") },
   handler: async (ctx, { judgeId }) => {
     return ctx.db
@@ -11,44 +44,47 @@ export const byJudge = internalQuery({
   },
 });
 
-export const replaceForJudge = internalMutation({
-  args: {
-    judgeId: v.id("judges"),
-    opinions: v.array(
-      v.object({
-        courtListenerClusterId: v.number(),
-        caseName: v.optional(v.string()),
-        dateFiled: v.optional(v.string()),
-        caseType: v.optional(v.string()),
-        opinionText: v.string(),
-      }),
-    ),
-  },
-  handler: async (ctx, { judgeId, opinions }) => {
-    const existing = await ctx.db
+// Find opinions for a judge that don't have text yet
+export const pendingDownloads = internalQuery({
+  args: { judgeId: v.id("judges") },
+  handler: async (ctx, { judgeId }) => {
+    const all = await ctx.db
       .query("judgeOpinions")
       .withIndex("by_judge", (q) => q.eq("judgeId", judgeId))
       .collect();
-    for (const op of existing) {
-      await ctx.db.delete(op._id);
-    }
-    for (const op of opinions) {
-      await ctx.db.insert("judgeOpinions", { judgeId, ...op });
-    }
+    return all.filter((op) => !op.opinionText);
   },
 });
 
-export const create = internalMutation({
+// Insert a ref (metadata only, no text yet). Skips if cluster ID already exists.
+export const insertRef = internalMutation({
   args: {
     judgeId: v.id("judges"),
     courtListenerClusterId: v.number(),
+    courtListenerOpinionId: v.optional(v.number()),
     caseName: v.optional(v.string()),
     dateFiled: v.optional(v.string()),
-    caseType: v.optional(v.string()),
-    opinionText: v.string(),
-    extractedData: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("judgeOpinions")
+      .withIndex("by_cluster", (q) =>
+        q.eq("courtListenerClusterId", args.courtListenerClusterId),
+      )
+      .first();
+    if (existing) return existing._id;
     return ctx.db.insert("judgeOpinions", args);
+  },
+});
+
+// Write downloaded text + HTML to an existing opinion row
+export const writeText = internalMutation({
+  args: {
+    id: v.id("judgeOpinions"),
+    opinionText: v.string(),
+    opinionHtml: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, opinionText, opinionHtml }) => {
+    await ctx.db.patch(id, { opinionText, opinionHtml });
   },
 });
